@@ -46,7 +46,7 @@ Memory that just works:
 
 ## Status
 
-✅ **Phase 4 of 6 Complete** — Semantic search and auto-capture working!
+✅ **All 6 Phases Complete!** — Core memory system built.
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -55,8 +55,8 @@ Memory that just works:
 | 2. Semantic | ✅ | Meaning-based search with fastembed |
 | 3. Bootstrap | ✅ | Import from OpenClaw workspace |
 | 4. Auto-capture | ✅ | Extract decisions/preferences/insights |
-| 5. Consolidation | 🔄 | Compress, merge, prune |
-| 6. Predictive | ⏳ | Context-aware surfacing |
+| 5. Consolidation | ✅ | Prune, merge, compress |
+| 6. Predictive | ✅ | Context-aware surfacing |
 
 ## Quick Start
 
