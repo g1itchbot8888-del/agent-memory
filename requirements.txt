@@ -1,0 +1,11 @@
+# Core
+sqlite-vec
+numpy
+
+# Embeddings (using sentence-transformers for local models)
+sentence-transformers
+torch
+
+# Utilities
+python-dateutil
+pyyaml
