@@ -46,7 +46,40 @@ Memory that just works:
 
 ## Status
 
-🚧 **Phase 0: Baseline** — Documenting current state, defining benchmarks
+✅ **Phase 4 of 6 Complete** — Semantic search and auto-capture working!
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 0. Baseline | ✅ | Documented current pain points |
+| 1. Foundation | ✅ | Identity, active, archive layers |
+| 2. Semantic | ✅ | Meaning-based search with fastembed |
+| 3. Bootstrap | ✅ | Import from OpenClaw workspace |
+| 4. Auto-capture | ✅ | Extract decisions/preferences/insights |
+| 5. Consolidation | 🔄 | Compress, merge, prune |
+| 6. Predictive | ⏳ | Context-aware surfacing |
+
+## Quick Start
+
+```bash
+# Bootstrap from existing OpenClaw workspace
+python -m src.bootstrap /path/to/workspace
+
+# Search memories semantically
+python -m src.tools.recall "what did we decide about pricing"
+
+# Capture new memories
+python -m src.tools.capture --decision "We chose X because Y"
+
+# Auto-capture from conversation
+echo "We decided to use fastembed" | python -m src.tools.auto_capture --stdin
+```
+
+## Documentation
+
+- [VISION.md](docs/VISION.md) — Core principles and goals
+- [SPEC.md](docs/SPEC.md) — Technical specification
+- [BENCHMARK.md](docs/BENCHMARK.md) — Agent Memory Benchmark
+- [PROGRESS.md](docs/PROGRESS.md) — Development log
 
 ## Why This Matters
 
