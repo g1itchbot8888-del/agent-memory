@@ -23,10 +23,14 @@ except ImportError:
     SQLITE_VEC_AVAILABLE = False
 
 try:
-    from sentence_transformers import SentenceTransformer
+    from fastembed import TextEmbedding
     EMBEDDINGS_AVAILABLE = True
 except ImportError:
-    EMBEDDINGS_AVAILABLE = False
+    try:
+        from sentence_transformers import SentenceTransformer
+        EMBEDDINGS_AVAILABLE = True
+    except ImportError:
+        EMBEDDINGS_AVAILABLE = False
 
 
 class Memory:
@@ -39,8 +43,8 @@ class Memory:
     - memories: Searchable archive with embeddings
     """
     
-    DEFAULT_MODEL = "all-MiniLM-L6-v2"  # Fast, small, good quality
-    EMBEDDING_DIM = 384  # Dimension for all-MiniLM-L6-v2
+    DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"  # Fast, small, good quality (fastembed)
+    EMBEDDING_DIM = 384  # Dimension for bge-small-en-v1.5
     
     def __init__(self, db_path: str = "memory.db", model_name: Optional[str] = None):
         self.db_path = db_path
@@ -62,7 +66,12 @@ class Memory:
     @property
     def model(self):
         if self._model is None and EMBEDDINGS_AVAILABLE:
-            self._model = SentenceTransformer(self.model_name)
+            try:
+                from fastembed import TextEmbedding
+                self._model = TextEmbedding(self.model_name)
+            except ImportError:
+                from sentence_transformers import SentenceTransformer
+                self._model = SentenceTransformer(self.model_name)
         return self._model
     
     def _init_db(self):
@@ -121,6 +130,15 @@ class Memory:
         """Generate embedding for text."""
         if not EMBEDDINGS_AVAILABLE or self.model is None:
             return None
+        try:
+            # fastembed returns a generator
+            from fastembed import TextEmbedding
+            if isinstance(self.model, TextEmbedding):
+                embeddings = list(self.model.embed([text]))
+                return embeddings[0].tolist()
+        except (ImportError, TypeError):
+            pass
+        # sentence-transformers
         return self.model.encode(text).tolist()
     
     # ==================== IDENTITY LAYER ====================

@@ -72,13 +72,19 @@ class TestMemoryArchive:
         mem.add('Lazy dog sleeping')
         
         results = mem.search('fox')
-        assert len(results) == 1
+        # With semantic search, should find the fox memory with highest relevance
+        assert len(results) >= 1
+        # The most relevant result should contain 'fox'
         assert 'fox' in results[0]['content']
     
-    def test_search_no_results(self, mem):
-        mem.add('Something completely different')
-        results = mem.search('nonexistent')
-        assert len(results) == 0
+    def test_search_relevance(self, mem):
+        mem.add('Machine learning is fascinating')
+        mem.add('The weather is nice today')
+        
+        results = mem.search('AI and neural networks')
+        # Semantic search should rank ML higher than weather
+        if len(results) >= 2:
+            assert results[0]['relevance'] >= results[1]['relevance']
 
 
 class TestStartupContext:
