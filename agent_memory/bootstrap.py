@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-from .memory import Memory
+from agent_memory.memory import Memory
 
 
 def parse_markdown_keyvalues(content: str) -> dict:

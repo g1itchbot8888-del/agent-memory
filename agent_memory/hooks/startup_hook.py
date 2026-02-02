@@ -22,8 +22,8 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from src.memory import Memory
-from src.surface import MemorySurfacer
+from agent_memory.memory import Memory
+from agent_memory.surface import MemorySurfacer
 
 
 def generate_startup_context(db_path: str, surface_query: str = None, max_memories: int = 3) -> str:

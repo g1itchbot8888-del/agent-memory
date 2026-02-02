@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import datetime, timezone
 
-from .memory import Memory
+from agent_memory.memory import Memory
 
 
 class OpenClawMemory:

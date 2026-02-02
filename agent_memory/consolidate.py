@@ -13,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 
-from .memory import Memory
+from agent_memory.memory import Memory
 
 
 @dataclass

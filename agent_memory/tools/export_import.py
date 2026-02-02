@@ -22,7 +22,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from src.memory import Memory
+from agent_memory.memory import Memory
 
 
 def export_database(db_path: str, output_path: str, include_embeddings: bool = False):

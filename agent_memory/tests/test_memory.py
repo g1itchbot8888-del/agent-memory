@@ -3,7 +3,7 @@
 import os
 import tempfile
 import pytest
-from src.memory import Memory
+from agent_memory.memory import Memory
 
 
 @pytest.fixture

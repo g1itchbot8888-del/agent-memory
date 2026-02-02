@@ -20,9 +20,9 @@ from dataclasses import dataclass
 from typing import List, Dict, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from src.memory import Memory
-from src.extract import extract_memories
-from src.surface import MemorySurfacer
+from agent_memory.memory import Memory
+from agent_memory.extract import extract_memories
+from agent_memory.surface import MemorySurfacer
 
 
 @dataclass
