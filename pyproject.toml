@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-memory"
+name = "openclaw-memory"
 version = "0.1.0"
 description = "Memory system for autonomous agents — semantic recall, auto-capture, hierarchical storage"
 readme = "README.md"
