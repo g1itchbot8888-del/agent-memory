@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from agent_memory.memory import Memory
+from agent_memory.learnings import LearningMachine
 
 
 def main():
@@ -26,19 +27,19 @@ def main():
     parser.add_argument("--limit", type=int, default=5, help="Max results")
     parser.add_argument("--min-salience", type=float, default=0.0, help="Minimum importance")
     parser.add_argument("--format", choices=["text", "json", "brief"], default="text")
+    parser.add_argument("--no-learnings", action="store_true", help="Skip learnings")
     
     args = parser.parse_args()
     
     mem = Memory(args.db)
+    lm = LearningMachine(args.db)
     
     try:
         results = mem.search(args.query, limit=args.limit, min_salience=args.min_salience)
         
         if not results:
             print("No matching memories found.")
-            return
-        
-        if args.format == "json":
+        elif args.format == "json":
             import json
             print(json.dumps(results, indent=2))
         elif args.format == "brief":
@@ -53,9 +54,16 @@ def main():
                 if r.get('created_at'):
                     print(f"   Created: {r['created_at'][:10]}")
                 print()
+        
+        # Surface relevant learnings alongside memories
+        if not args.no_learnings:
+            learnings_ctx = lm.format_context(args.query, limit=3)
+            if learnings_ctx:
+                print(learnings_ctx)
     
     finally:
         mem.close()
+        lm.close()
 
 
 if __name__ == "__main__":
