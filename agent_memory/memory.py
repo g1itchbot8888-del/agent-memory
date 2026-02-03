@@ -205,15 +205,28 @@ class Memory:
     # ==================== MEMORY ARCHIVE ====================
     
     def add(self, content: str, memory_type: str = "fact", 
-            salience: float = 0.5, metadata: Optional[Dict] = None) -> int:
-        """Add a memory to the archive."""
+            salience: float = 0.5, metadata: Optional[Dict] = None,
+            layer: Optional[str] = None, auto_classify: bool = True) -> int:
+        """Add a memory with smart layer classification."""
+        from agent_memory.classify import classify_and_score
+        
+        # Auto-classify layer and salience if not explicitly set
+        if auto_classify:
+            classification = classify_and_score(content, memory_type, salience)
+            if layer is None:
+                layer = classification['layer']
+            salience = classification['salience']
+        
+        if layer is None:
+            layer = 'archive'
+        
         cursor = self.conn.cursor()
         now = self._now()
         
         cursor.execute("""
-            INSERT INTO memories (content, memory_type, salience, created_at, updated_at, metadata)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (content, memory_type, salience, now, now, json.dumps(metadata) if metadata else None))
+            INSERT INTO memories (content, layer, memory_type, salience, created_at, updated_at, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (content, layer, memory_type, salience, now, now, json.dumps(metadata) if metadata else None))
         
         memory_id = cursor.lastrowid
         
