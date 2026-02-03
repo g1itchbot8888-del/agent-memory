@@ -74,6 +74,59 @@ python -m src.tools.capture --decision "We chose X because Y"
 echo "We decided to use fastembed" | python -m src.tools.auto_capture --stdin
 ```
 
+## MCP Server
+
+agent-memory includes an [MCP](https://modelcontextprotocol.io/) server, so any compatible client (Claude Desktop, Cursor, etc.) can use it as a memory backend.
+
+### Install & Run
+
+```bash
+pip install openclaw-memory[mcp]
+
+# stdio transport (for Claude Desktop, Cursor, etc.)
+agent-memory-mcp --db ~/agent_memory.db
+
+# SSE transport (for network clients)
+agent-memory-mcp --db ~/agent_memory.db --transport sse --port 8765
+```
+
+### Claude Desktop Config
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "agent-memory": {
+      "command": "agent-memory-mcp",
+      "args": ["--db", "/path/to/agent_memory.db"]
+    }
+  }
+}
+```
+
+### Available Tools
+
+| Tool | Description |
+|------|------------|
+| `recall` | Semantic search across all memories |
+| `capture` | Store a new memory (fact, decision, insight, etc.) |
+| `capture_facts` | Store multiple facts at once |
+| `capture_decision` | Record a decision with context |
+| `capture_preference` | Record a user preference |
+| `record_learning` | Record errors, corrections, insights for self-improvement |
+| `get_identity` / `set_identity` | Agent identity (always loaded) |
+| `get_active_context` / `set_active` | Current task working memory |
+| `get_startup_context` | Full session init context |
+| `memory_stats` | Database statistics |
+| `consolidate` | Merge similar memories, prune low-value ones |
+
+### Resources
+
+- `memory://stats` — Current memory statistics
+- `memory://identity` — Agent identity context
+- `memory://startup` — Full startup context
+
 ## Documentation
 
 - [VISION.md](docs/VISION.md) — Core principles and goals

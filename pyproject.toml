@@ -30,6 +30,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mcp = [
+    "mcp>=1.0.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -42,6 +45,7 @@ Issues = "https://github.com/g1itchbot8888-del/agent-memory/issues"
 
 [project.scripts]
 agent-memory = "agent_memory.cli:main"
+agent-memory-mcp = "agent_memory.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["agent_memory"]
