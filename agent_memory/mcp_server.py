@@ -307,6 +307,67 @@ def memory_stats() -> str:
 
 
 @mcp.tool()
+def graph_stats() -> str:
+    """
+    Get statistics about the memory graph — relationships, superseded memories, temporal memories.
+    """
+    mem = _get_memory()
+    try:
+        from agent_memory.graph import GraphMemory
+        graph = GraphMemory(mem.conn)
+        stats = graph.stats()
+        
+        output = "Graph Statistics:\n"
+        output += f"  Total edges: {stats.get('total_edges', 0)}\n"
+        
+        by_rel = stats.get('by_relation', {})
+        if by_rel:
+            output += "  By relation:\n"
+            for r, count in sorted(by_rel.items()):
+                output += f"    {r}: {count}\n"
+        
+        output += f"  Superseded memories: {stats.get('superseded_memories', 0)}\n"
+        output += f"  Temporal memories: {stats.get('temporal_memories', 0)}\n"
+        output += f"  Avg confidence: {stats.get('avg_confidence', 0):.3f}\n"
+        return output
+    except Exception as e:
+        return f"Graph not available: {e}"
+    finally:
+        mem.close()
+
+
+@mcp.tool()
+def get_memory_graph(memory_id: int) -> str:
+    """
+    Get the graph relationships for a specific memory — what it updates, extends, or derives from.
+    
+    Args:
+        memory_id: The memory ID to look up relationships for
+    """
+    mem = _get_memory()
+    try:
+        from agent_memory.graph import GraphMemory
+        graph = GraphMemory(mem.conn)
+        edges = graph.get_edges(memory_id)
+        
+        if not edges:
+            return f"Memory {memory_id} has no graph relationships."
+        
+        output = f"Relationships for memory {memory_id}:\n"
+        for e in edges:
+            direction = "→" if e['direction'] == 'out' else "←"
+            other_id = e['target_id'] if e['direction'] == 'out' else e['source_id']
+            output += f"  {direction} {e['relation']} memory {other_id} (confidence: {e['confidence']:.3f})\n"
+            output += f"    {e['connected_content']}\n"
+        
+        return output
+    except Exception as e:
+        return f"Graph not available: {e}"
+    finally:
+        mem.close()
+
+
+@mcp.tool()
 def consolidate(dry_run: bool = True) -> str:
     """
     Run memory consolidation — merges similar memories and prunes low-value ones.

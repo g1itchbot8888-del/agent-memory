@@ -206,8 +206,9 @@ class Memory:
     
     def add(self, content: str, memory_type: str = "fact", 
             salience: float = 0.5, metadata: Optional[Dict] = None,
-            layer: Optional[str] = None, auto_classify: bool = True) -> int:
-        """Add a memory with smart layer classification."""
+            layer: Optional[str] = None, auto_classify: bool = True,
+            detect_relations: bool = True) -> int:
+        """Add a memory with smart layer classification and graph relations."""
         from agent_memory.classify import classify_and_score
         
         # Auto-classify layer and salience if not explicitly set
@@ -239,14 +240,57 @@ class Memory:
             """, (memory_id, json.dumps(embedding)))
         
         self.conn.commit()
+        
+        # Detect graph relationships with existing memories
+        if detect_relations:
+            self._detect_and_store_relations(memory_id, content, embedding)
+        
         return memory_id
     
-    def search(self, query: str, limit: int = 5, min_salience: float = 0.0) -> List[Dict]:
-        """Search memories by semantic similarity."""
+    def _detect_and_store_relations(self, memory_id: int, content: str,
+                                     embedding: Optional[List[float]] = None):
+        """Find and store relationships between new memory and existing ones."""
+        try:
+            from agent_memory.graph import GraphMemory
+            graph = GraphMemory(self.conn)
+            
+            # Search for similar existing memories
+            similar = self.search(content, limit=5, min_salience=0.0)
+            # Filter out the memory we just added
+            similar = [s for s in similar if s['id'] != memory_id]
+            
+            if similar:
+                relations = graph.detect_relationships(
+                    memory_id, content, similar, embedding
+                )
+                
+                for rel in relations:
+                    graph.add_edge(
+                        source_id=rel['source_id'],
+                        target_id=rel['target_id'],
+                        relation=rel['relation'],
+                        confidence=rel['confidence']
+                    )
+            
+            # Check for temporal expiry
+            expiry = graph.detect_expiry(content)
+            if expiry:
+                graph.set_expiry(memory_id, expiry)
+                
+        except Exception:
+            # Graph is optional — don't break core add() if it fails
+            pass
+    
+    def search(self, query: str, limit: int = 5, min_salience: float = 0.0,
+               use_graph: bool = True) -> List[Dict]:
+        """Search memories by semantic similarity, enhanced with graph relationships."""
         cursor = self.conn.cursor()
         
         # Try semantic search first
         query_embedding = self._embed(query)
+        
+        # Fetch extra results when graph is enabled (some may be filtered)
+        fetch_limit = limit * 2 if use_graph else limit
         
         if query_embedding and SQLITE_VEC_AVAILABLE:
             # Vector similarity search
@@ -260,7 +304,7 @@ class Memory:
                 WHERE m.salience >= ?
                 ORDER BY distance ASC
                 LIMIT ?
-            """, (json.dumps(query_embedding), min_salience, limit))
+            """, (json.dumps(query_embedding), min_salience, fetch_limit))
         else:
             # Fallback to keyword search
             cursor.execute("""
@@ -269,7 +313,7 @@ class Memory:
                 WHERE content LIKE ? AND salience >= ?
                 ORDER BY created_at DESC
                 LIMIT ?
-            """, (f"%{query}%", min_salience, limit))
+            """, (f"%{query}%", min_salience, fetch_limit))
         
         results = []
         for row in cursor.fetchall():
@@ -285,7 +329,18 @@ class Memory:
                 'metadata': json.loads(row['metadata']) if row['metadata'] else None
             })
         
-        return results
+        # Apply graph enhancement (supersession, extensions)
+        if use_graph and results:
+            try:
+                from agent_memory.graph import GraphMemory
+                graph = GraphMemory(self.conn)
+                # Expire any temporal memories first
+                graph.expire_memories()
+                results = graph.search_with_graph(results)
+            except Exception:
+                pass  # Graph is optional
+        
+        return results[:limit]
     
     def _record_access(self, memory_id: int):
         """Record that a memory was accessed."""
