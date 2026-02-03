@@ -19,18 +19,37 @@ import json
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
+# Try to import embedding support
+try:
+    import sqlite_vec
+    SQLITE_VEC_AVAILABLE = True
+except ImportError:
+    SQLITE_VEC_AVAILABLE = False
+
+try:
+    from fastembed import TextEmbedding
+    EMBEDDINGS_AVAILABLE = True
+except ImportError:
+    EMBEDDINGS_AVAILABLE = False
+
 
 class LearningMachine:
     """
-    Automatic self-learning system.
+    Automatic self-learning system with semantic search.
     
     Captures operational patterns so the agent improves over time
     without retraining or fine-tuning.
+    
+    Uses embeddings for semantic retrieval when available,
+    falls back to keyword matching.
     """
+    
+    EMBEDDING_DIM = 384  # bge-small-en-v1.5
     
     def __init__(self, db_path: str = "memory.db"):
         self.db_path = db_path
         self._conn: Optional[sqlite3.Connection] = None
+        self._model: Optional[Any] = None
         self._init_db()
     
     @property
@@ -38,13 +57,32 @@ class LearningMachine:
         if self._conn is None:
             self._conn = sqlite3.connect(self.db_path)
             self._conn.row_factory = sqlite3.Row
+            if SQLITE_VEC_AVAILABLE:
+                self._conn.enable_load_extension(True)
+                sqlite_vec.load(self._conn)
         return self._conn
+    
+    @property
+    def model(self):
+        if self._model is None and EMBEDDINGS_AVAILABLE:
+            self._model = TextEmbedding("BAAI/bge-small-en-v1.5")
+        return self._model
+    
+    def _embed(self, text: str) -> Optional[List[float]]:
+        """Generate embedding for text."""
+        if not EMBEDDINGS_AVAILABLE or self.model is None:
+            return None
+        try:
+            embeddings = list(self.model.embed([text]))
+            return embeddings[0].tolist()
+        except Exception:
+            return None
     
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
     
     def _init_db(self):
-        """Initialize learnings table."""
+        """Initialize learnings table with optional vector support."""
         cursor = self.conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS learnings (
@@ -64,6 +102,14 @@ class LearningMachine:
             CREATE INDEX IF NOT EXISTS idx_learnings_kind 
             ON learnings(kind)
         """)
+        # Vector embeddings for semantic search
+        if SQLITE_VEC_AVAILABLE:
+            cursor.execute(f"""
+                CREATE VIRTUAL TABLE IF NOT EXISTS learning_embeddings USING vec0(
+                    learning_id INTEGER PRIMARY KEY,
+                    embedding FLOAT[{self.EMBEDDING_DIM}]
+                )
+            """)
         self.conn.commit()
     
     def record(self, kind: str, trigger: str, learning: str, 
@@ -88,8 +134,20 @@ class LearningMachine:
             VALUES (?, ?, ?, ?, ?, ?)
         """, (kind, trigger, learning, context, self._now(),
               json.dumps(metadata) if metadata else None))
+        
+        learning_id = cursor.lastrowid
+        
+        # Embed the combined trigger + learning for semantic search
+        embed_text = f"{trigger} {learning}"
+        embedding = self._embed(embed_text)
+        if embedding and SQLITE_VEC_AVAILABLE:
+            cursor.execute("""
+                INSERT INTO learning_embeddings (learning_id, embedding)
+                VALUES (?, ?)
+            """, (learning_id, json.dumps(embedding)))
+        
         self.conn.commit()
-        return cursor.lastrowid
+        return learning_id
     
     def record_recall_hit(self, query: str, result_summary: str, 
                           usefulness: float = 1.0):
@@ -143,20 +201,60 @@ class LearningMachine:
         """
         Get learnings relevant to current context.
         
-        Simple keyword matching for now — can be upgraded to semantic search later.
+        Uses semantic search when available, falls back to keyword matching.
         """
         cursor = self.conn.cursor()
         
-        # Extract key terms from context
-        terms = [t.lower().strip() for t in context.split() if len(t) > 3]
+        # Try semantic search first
+        query_embedding = self._embed(context)
         
+        if query_embedding and SQLITE_VEC_AVAILABLE:
+            # Semantic vector search
+            if kind:
+                cursor.execute(f"""
+                    SELECT l.id, l.kind, l.trigger_text, l.learning, l.context,
+                           l.times_applied, l.created_at, l.metadata,
+                           vec_distance_cosine(e.embedding, ?) as distance
+                    FROM learnings l
+                    JOIN learning_embeddings e ON l.id = e.learning_id
+                    WHERE l.kind = ?
+                    ORDER BY distance ASC
+                    LIMIT ?
+                """, (json.dumps(query_embedding), kind, limit))
+            else:
+                cursor.execute(f"""
+                    SELECT l.id, l.kind, l.trigger_text, l.learning, l.context,
+                           l.times_applied, l.created_at, l.metadata,
+                           vec_distance_cosine(e.embedding, ?) as distance
+                    FROM learnings l
+                    JOIN learning_embeddings e ON l.id = e.learning_id
+                    ORDER BY distance ASC
+                    LIMIT ?
+                """, (json.dumps(query_embedding), limit))
+            
+            results = []
+            for row in cursor.fetchall():
+                results.append({
+                    'id': row['id'],
+                    'kind': row['kind'],
+                    'trigger': row['trigger_text'],
+                    'learning': row['learning'],
+                    'context': row['context'],
+                    'times_applied': row['times_applied'],
+                    'created_at': row['created_at'],
+                    'relevance': 1 - row['distance'] if row['distance'] else 0.5,
+                    'metadata': json.loads(row['metadata']) if row['metadata'] else None
+                })
+            return results
+        
+        # Fallback: keyword matching
+        terms = [t.lower().strip() for t in context.split() if len(t) > 3]
         if not terms:
             return []
         
-        # Build LIKE conditions for key terms
         conditions = []
         params = []
-        for term in terms[:10]:  # Cap at 10 terms
+        for term in terms[:10]:
             conditions.append("(trigger_text LIKE ? OR learning LIKE ?)")
             params.extend([f"%{term}%", f"%{term}%"])
         
@@ -186,7 +284,6 @@ class LearningMachine:
                 'created_at': row['created_at'],
                 'metadata': json.loads(row['metadata']) if row['metadata'] else None
             })
-        
         return results
     
     def get_errors(self, limit: int = 10) -> List[Dict]:
