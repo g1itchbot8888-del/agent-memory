@@ -332,7 +332,7 @@ class Memory:
         cursor = self.conn.cursor()
         
         cursor.execute("SELECT COUNT(*) as count FROM memories")
-        memory_count = cursor.fetchone()['count']
+        total = cursor.fetchone()['count']
         
         cursor.execute("SELECT COUNT(*) as count FROM identity")
         identity_count = cursor.fetchone()['count']
@@ -340,10 +340,29 @@ class Memory:
         cursor.execute("SELECT COUNT(*) as count FROM active_context")
         active_count = cursor.fetchone()['count']
         
+        # By type breakdown
+        by_type = {}
+        try:
+            cursor.execute("SELECT memory_type, COUNT(*) as count FROM memories GROUP BY memory_type ORDER BY count DESC")
+            by_type = {row['memory_type']: row['count'] for row in cursor.fetchall()}
+        except Exception:
+            pass
+        
+        # By layer breakdown
+        by_layer = {}
+        try:
+            cursor.execute("SELECT layer, COUNT(*) as count FROM memories GROUP BY layer ORDER BY count DESC")
+            by_layer = {row['layer']: row['count'] for row in cursor.fetchall()}
+        except Exception:
+            pass
+        
         return {
-            'memories': memory_count,
+            'total_memories': total,
+            'memories': total,  # backward compat
             'identity_keys': identity_count,
             'active_keys': active_count,
+            'by_type': by_type,
+            'by_layer': by_layer,
             'embeddings_available': EMBEDDINGS_AVAILABLE,
             'vector_search_available': SQLITE_VEC_AVAILABLE
         }
