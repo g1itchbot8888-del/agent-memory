@@ -28,6 +28,8 @@ def main():
     parser.add_argument("--min-salience", type=float, default=0.0, help="Minimum importance")
     parser.add_argument("--format", choices=["text", "json", "brief"], default="text")
     parser.add_argument("--no-learnings", action="store_true", help="Skip learnings")
+    parser.add_argument("--check-conflicts", action="store_true", 
+                        help="Check for contradictions with identity layer")
     
     args = parser.parse_args()
     
@@ -41,7 +43,11 @@ def main():
             print("No matching memories found.")
         elif args.format == "json":
             import json
-            print(json.dumps(results, indent=2))
+            if args.check_conflicts:
+                conflicts = mem.detect_conflicts(results)
+                print(json.dumps({"results": results, "conflicts": conflicts}, indent=2))
+            else:
+                print(json.dumps(results, indent=2))
         elif args.format == "brief":
             for r in results:
                 print(f"• {r['content'][:100]}...")
@@ -54,6 +60,17 @@ def main():
                 if r.get('created_at'):
                     print(f"   Created: {r['created_at'][:10]}")
                 print()
+        
+        # Check for identity conflicts if requested (or always in text mode)
+        if args.check_conflicts and results:
+            conflicts = mem.detect_conflicts(results)
+            if conflicts:
+                print("\n⚠️  IDENTITY CONFLICTS DETECTED:")
+                for c in conflicts:
+                    print(f"   Identity: {c['identity_key']} = {c['identity_value']}")
+                    print(f"   Conflict: {c['conflicting_memory'].get('content', '')[:150]}")
+                    print(f"   Similarity: {c['similarity']}")
+                    print()
         
         # Surface relevant learnings alongside memories
         if not args.no_learnings:

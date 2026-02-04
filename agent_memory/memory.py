@@ -352,6 +352,117 @@ class Memory:
         """, (self._now(), memory_id))
         self.conn.commit()
     
+    # ==================== CONFLICT DETECTION ====================
+    
+    def detect_conflicts(self, search_results: List[Dict], 
+                         threshold: float = 0.6) -> List[Dict]:
+        """
+        Detect contradictions between search results and identity-layer memories.
+        
+        When archive/active memories contradict identity, this surfaces the 
+        conflict explicitly rather than silently letting model weights decide.
+        
+        Returns list of conflicts:
+        [{"identity_key": str, "identity_value": str, 
+          "conflicting_memory": Dict, "similarity": float, "explanation": str}]
+        """
+        conflicts = []
+        identity = self.get_identity()
+        if not identity or not search_results:
+            return conflicts
+        
+        # Build identity statements for comparison
+        identity_statements = []
+        for key, value in identity.items():
+            identity_statements.append({
+                'key': key,
+                'value': value,
+                'text': f"{key}: {value}"
+            })
+        
+        # Get embeddings for identity statements
+        if not EMBEDDINGS_AVAILABLE or not SQLITE_VEC_AVAILABLE:
+            return conflicts  # Can't detect without embeddings
+            
+        identity_embeddings = []
+        for stmt in identity_statements:
+            emb = self._embed(stmt['text'])
+            if emb:
+                identity_embeddings.append((stmt, emb))
+        
+        # Compare each search result against identity
+        for result in search_results:
+            result_embedding = self._embed(result.get('content', ''))
+            if not result_embedding:
+                continue
+                
+            for stmt, id_emb in identity_embeddings:
+                # Calculate similarity
+                try:
+                    import json as _json
+                    # Cosine similarity
+                    dot = sum(a * b for a, b in zip(result_embedding, id_emb))
+                    norm_a = sum(a * a for a in result_embedding) ** 0.5
+                    norm_b = sum(b * b for b in id_emb) ** 0.5
+                    similarity = dot / (norm_a * norm_b) if norm_a and norm_b else 0
+                except Exception:
+                    continue
+                
+                if similarity < threshold:
+                    continue
+                
+                # High similarity between a search result and an identity statement
+                # could mean agreement OR contradiction. Use heuristics to detect contradiction.
+                result_content = result.get('content', '').lower()
+                identity_value = stmt['value'].lower()
+                
+                # Contradiction signals
+                contradiction_signals = [
+                    'not ' in result_content and identity_value.replace('not ', '') in result_content,
+                    'actually' in result_content,
+                    'changed' in result_content,
+                    'used to' in result_content,
+                    'no longer' in result_content,
+                    'incorrect' in result_content,
+                    'wrong' in result_content,
+                    'correction' in result_content,
+                ]
+                
+                # Check if the memory explicitly states something different
+                # about the same topic (same key mentioned but different value)
+                key_mentioned = stmt['key'].lower() in result_content
+                value_differs = identity_value not in result_content
+                topic_overlap = key_mentioned and value_differs
+                
+                if any(contradiction_signals) or topic_overlap:
+                    conflicts.append({
+                        'identity_key': stmt['key'],
+                        'identity_value': stmt['value'],
+                        'conflicting_memory': result,
+                        'similarity': round(similarity, 3),
+                        'explanation': (
+                            f"Identity says '{stmt['key']}: {stmt['value']}' "
+                            f"but memory from {result.get('created_at', 'unknown')} "
+                            f"suggests: {result.get('content', '')[:200]}"
+                        )
+                    })
+        
+        return conflicts
+    
+    def search_with_conflicts(self, query: str, limit: int = 5, 
+                               min_salience: float = 0.0) -> Dict:
+        """
+        Search memories and check for conflicts with identity layer.
+        
+        Returns: {"results": [...], "conflicts": [...]}
+        """
+        results = self.search(query, limit=limit, min_salience=min_salience)
+        conflicts = self.detect_conflicts(results)
+        return {
+            'results': results,
+            'conflicts': conflicts
+        }
+    
     # ==================== FULL CONTEXT ====================
     
     def get_startup_context(self) -> str:
