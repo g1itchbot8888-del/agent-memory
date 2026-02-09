@@ -249,7 +249,19 @@ class Memory:
     
     def _detect_and_store_relations(self, memory_id: int, content: str,
                                      embedding: Optional[List[float]] = None):
-        """Find and store relationships between new memory and existing ones."""
+        """Find and store relationships between new memory and existing ones.
+        
+        Implements bidirectional linking (A-mem "memory evolution"):
+        When A relates to B, we create both A→B and B→A edges so
+        existing memories know about new related content.
+        """
+        # Reverse relation mapping for bidirectional linking
+        REVERSE_RELATIONS = {
+            'updates': 'updated_by',
+            'extends': 'extended_by', 
+            'derives': 'contributes_to',
+        }
+        
         try:
             from agent_memory.graph import GraphMemory
             graph = GraphMemory(self.conn)
@@ -265,12 +277,23 @@ class Memory:
                 )
                 
                 for rel in relations:
+                    # Forward edge: new → existing
                     graph.add_edge(
                         source_id=rel['source_id'],
                         target_id=rel['target_id'],
                         relation=rel['relation'],
                         confidence=rel['confidence']
                     )
+                    
+                    # Reverse edge: existing → new (memory evolution)
+                    reverse_rel = REVERSE_RELATIONS.get(rel['relation'])
+                    if reverse_rel:
+                        graph.add_edge(
+                            source_id=rel['target_id'],  # existing
+                            target_id=rel['source_id'],  # new
+                            relation=reverse_rel,
+                            confidence=rel['confidence'] * 0.9  # slightly lower confidence for reverse
+                        )
             
             # Check for temporal expiry
             expiry = graph.detect_expiry(content)

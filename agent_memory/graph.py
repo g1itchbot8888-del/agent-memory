@@ -22,9 +22,15 @@ from enum import Enum
 
 
 class Relation(str, Enum):
+    # Forward relations (new memory → existing)
     UPDATES = "updates"      # New info contradicts/replaces old
     EXTENDS = "extends"      # New info adds detail to old
     DERIVES = "derives"      # New insight inferred from multiple memories
+    
+    # Reverse relations (existing → new, for bidirectional linking / memory evolution)
+    UPDATED_BY = "updated_by"       # This memory was updated by a newer one
+    EXTENDED_BY = "extended_by"     # This memory was extended with more detail
+    CONTRIBUTES_TO = "contributes_to"  # This memory contributed to a derived insight
 
 
 # Temporal patterns for automatic forgetting
