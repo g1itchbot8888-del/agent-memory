@@ -129,6 +129,22 @@ class OpenClawMemory:
         """
         return self.surfacer.surface(context, limit=limit, min_confidence=0.0)
     
+    def surface_for_startup(self) -> str:
+        """
+        Phase 6: Intelligent startup context surfacing.
+        
+        Returns high-priority memories at session initialization:
+        - Active task context
+        - Recent decisions
+        - Identity reminders
+        - Frequently accessed memories
+        
+        Returns:
+            Formatted markdown with startup context
+        """
+        surfaced = self.surfacer.surface_for_startup()
+        return self.surfacer.format_surfaced(surfaced, verbose=False)
+    
     def surface_for_message(self, message: str) -> List[Dict]:
         """
         Get raw memory results for a message (for more control).

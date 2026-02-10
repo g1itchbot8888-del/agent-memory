@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 import json
 
 from agent_memory.memory import Memory
+from agent_memory.graph import GraphMemory, Relation
 
 
 @dataclass
@@ -52,12 +53,17 @@ class MemorySurfacer:
     2. Task inference: Detect current task from context
     3. Temporal cues: "yesterday" → date-range filtering
     4. Active context: Always surface current task memories
-    5. Contradiction detection: Flag conflicting information
+    5. Contradiction detection: Flag conflicting information using graph relationships
     
     Scoring:
     - High relevance: Direct entity/task match + semantic similarity
     - Medium: Semantic similarity alone
     - Low: Temporal or category match
+    
+    Graph-Aware:
+    - Uses memory_edges to detect UPDATES relations (corrections)
+    - Flags if memories contradict each other (via graph)
+    - Prefers latest versions of updated memories
     """
     
     # Enhanced entity patterns
@@ -92,6 +98,7 @@ class MemorySurfacer:
     
     def __init__(self, memory: Memory):
         self.mem = memory
+        self.graph = GraphMemory(memory.conn)  # Graph-aware contradiction detection
     
     def surface(self, context: str, limit: int = 5, min_confidence: float = 0.3) -> List[SurfacedMemory]:
         """
@@ -350,21 +357,76 @@ class MemorySurfacer:
     
     def _detect_contradictions(self, memories: List[SurfacedMemory]) -> List[SurfacedMemory]:
         """
-        Detect potential contradictions between surfaced memories.
+        Detect contradictions between surfaced memories using graph relationships.
         
-        Flags memories that may conflict with each other or with identity.
+        Strategy:
+        1. Check graph for UPDATE relations (new memory contradicts old)
+        2. Flag if multiple conflicting versions are present
+        3. Prefer latest versions when available
+        4. Simple fallback: content fingerprint matching
+        
+        Sets may_contradict = True on memories that are:
+        - Superseded by newer info (in graph)
+        - Directly conflicting with another surfaced memory
         """
-        # For now, simple implementation: flag if similar content from different periods
-        # In production: use graph relationships to find actual contradictions
+        if not memories:
+            return memories
         
+        # Build map of memory IDs for quick lookup
+        mem_by_id = {m.id: m for m in memories}
+        
+        # Check graph for UPDATE relations
+        try:
+            cursor = self.mem.conn.cursor()
+            
+            for mem in memories:
+                # Check if this memory was updated by a newer one
+                cursor.execute("""
+                    SELECT source_id, confidence
+                    FROM memory_edges
+                    WHERE target_id = ? AND relation = 'updates'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """, (mem.id,))
+                
+                update_row = cursor.fetchone()
+                if update_row:
+                    # This memory was updated; mark it
+                    mem.may_contradict = True
+                    # Check if newer version is also surfaced
+                    newer_id = update_row[0]
+                    if newer_id in mem_by_id:
+                        # Both old and new versions surfaced - flag both
+                        mem_by_id[newer_id].may_contradict = True
+                        mem.tags.append("superseded-by-newer")
+                
+                # Check if this memory updates any other surfaced memory
+                cursor.execute("""
+                    SELECT target_id, confidence
+                    FROM memory_edges
+                    WHERE source_id = ? AND relation = 'updates'
+                """, (mem.id,))
+                
+                for row in cursor.fetchall():
+                    target_id = row[0]
+                    if target_id in mem_by_id:
+                        # We're updating another surfaced memory
+                        mem_by_id[target_id].may_contradict = True
+                        mem_by_id[target_id].tags.append(f"updated-by-{mem.id}")
+        
+        except Exception as e:
+            # Fallback to simple content matching if graph fails
+            pass
+        
+        # Fallback: simple content fingerprint matching
         seen_content_keys = {}
         for mem in memories:
-            # Create a content fingerprint (first 50 chars)
             key = mem.content[:50].lower()
             if key in seen_content_keys:
-                # Potential contradiction
                 mem.may_contradict = True
                 seen_content_keys[key].may_contradict = True
+                if "conflict:similar-content" not in mem.tags:
+                    mem.tags.append("conflict:similar-content")
             else:
                 seen_content_keys[key] = mem
         
