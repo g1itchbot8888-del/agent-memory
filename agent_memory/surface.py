@@ -5,7 +5,7 @@ Anticipates what memories are relevant based on:
 - Current conversation context (semantic)
 - Active task detection
 - Mentioned entities (people, projects, topics)
-- Temporal cues ("yesterday", "last week")
+- Temporal cues ("yesterday", "last week") with date-range filtering
 - Task frequency patterns
 - Contradiction detection
 
@@ -15,12 +15,13 @@ without explicit search queries.
 Enhancements (2026-02-10):
 - Better entity extraction (projects, topics, verbs)
 - Task frequency scoring
-- Temporal filtering with actual date ranges
+- Temporal filtering with actual date ranges from DB
 - Contradiction detection
 - Confidence scoring per memory
 """
 
 import re
+import sqlite3
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass, field
@@ -100,7 +101,7 @@ class MemorySurfacer:
         1. Entity matches (people, projects) → high confidence
         2. Task inference → high confidence
         3. Semantic similarity → medium confidence
-        4. Temporal matches → low confidence
+        4. Temporal matches with date filtering → low confidence
         
         Args:
             context: Current conversation/task context
@@ -157,10 +158,13 @@ class MemorySurfacer:
                     ))
                     seen_ids.add(r['id'])
         
-        # 3. LOW CONFIDENCE: Temporal matches (if mentioned)
+        # 3. LOW CONFIDENCE: Temporal matches with date filtering
         if temporal and len(surfaced) < limit:
-            # Would search by date range when date filtering is available
-            pass
+            temporal_results = self._surface_by_temporal(temporal, limit - len(surfaced))
+            for mem in temporal_results:
+                if mem.id not in seen_ids:
+                    surfaced.append(mem)
+                    seen_ids.add(mem.id)
         
         # 4. Detect and flag contradictions
         surfaced = self._detect_contradictions(surfaced)
@@ -295,6 +299,54 @@ class MemorySurfacer:
                 return (delta, description)
         
         return None
+    
+    def _surface_by_temporal(self, temporal_info: Tuple[timedelta, str], limit: int = 3) -> List[SurfacedMemory]:
+        """
+        Surface memories from a specific time period.
+        
+        Args:
+            temporal_info: (timedelta, description) tuple from _extract_temporal
+            limit: Max memories to return
+        
+        Returns:
+            List of surfaced memories from that time period
+        """
+        delta, description = temporal_info
+        target_date = datetime.now(timezone.utc) - delta
+        target_iso = target_date.isoformat()
+        
+        surfaced = []
+        
+        try:
+            # Query DB directly for memories created after target date
+            cursor = self.mem.conn.cursor()
+            cursor.execute("""
+                SELECT id, content, memory_type, created_at 
+                FROM memories 
+                WHERE created_at >= ? 
+                ORDER BY created_at DESC 
+                LIMIT ?
+            """, (target_iso, limit))
+            
+            rows = cursor.fetchall()
+            for row in rows:
+                # Skip if we already have this memory
+                mem_id = row[0]
+                
+                surfaced.append(SurfacedMemory(
+                    id=mem_id,
+                    content=row[1],
+                    memory_type=row[2],
+                    relevance=0.5,  # Medium relevance for temporal
+                    reason=f"created {description}",
+                    confidence=0.4,  # Low confidence for temporal match
+                    tags=[f"temporal:{description}", "date-range"]
+                ))
+        except Exception as e:
+            # Silently fail if DB query doesn't work
+            pass
+        
+        return surfaced
     
     def _detect_contradictions(self, memories: List[SurfacedMemory]) -> List[SurfacedMemory]:
         """
