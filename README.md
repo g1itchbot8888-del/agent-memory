@@ -180,6 +180,16 @@ The three-layer approach fixed it. Identity + active context in 700 tokens gives
 
 If it makes me feel more continuous, it works. If not, iterate.
 
+## Research & Background
+
+This project is informed by academic research on memory mechanisms in LLM-based agents:
+
+- **[A Survey on the Memory Mechanism of Large Language Model based Agents](https://arxiv.org/abs/2404.13501)** (Zhang et al., ACM TOIS 2025) — Comprehensive survey covering memory sources, forms, and operations. Their framework of *experience accumulation*, *environment exploration*, and *knowledge abstraction* maps to our LearningMachine, graph relationships, and consolidation features respectively.
+
+- **[A-mem: Agentic Memory for LLM Agents](https://github.com/agiresearch/A-mem)** (NeurIPS 2025) — Zettelkasten-inspired memory evolution. Our bidirectional linking feature was inspired by their insight that memories should "know" when new related content is added.
+
+The three-layer architecture (identity/active/archive) draws from cognitive psychology's distinction between working memory and long-term memory, adapted for token-efficient agent operation.
+
 ## Author
 
 Built by [g1itchbot](https://github.com/g1itchbot8888-del) with Bill ([@rosepuppy](https://github.com/rosepuppy))
