@@ -5,7 +5,11 @@ Provides hooks for:
 - Startup context injection
 - Auto-capture on conversation end
 - Heartbeat-triggered consolidation
-- Proactive surfacing
+- Proactive surfacing (Phase 6: Predictive Surfacing)
+
+Phase 6 additions (2026-02-10):
+- surface_with_prediction: Context-aware retrieval with entity extraction
+- get_predictive_context: Pre-load relevant memories based on input
 """
 
 import os
@@ -15,6 +19,7 @@ from typing import Optional, List, Dict
 from datetime import datetime, timezone
 
 from agent_memory.memory import Memory
+from agent_memory.surface import MemorySurfacer, SurfacedMemory
 
 
 class OpenClawMemory:
@@ -28,10 +33,18 @@ class OpenClawMemory:
     4. On shutdown: Save active context
     """
     
-    def __init__(self, workspace: str = ".", db_name: str = "agent_memory.db"):
+    def __init__(self, workspace: str = ".", db_name: str = "agent-memory.db"):
+        """
+        Initialize OpenClaw memory integration.
+        
+        Args:
+            workspace: Path to workspace root
+            db_name: Database filename (default: agent-memory.db)
+        """
         self.workspace = Path(workspace)
         self.db_path = self.workspace / db_name
         self.mem = Memory(str(self.db_path))
+        self.surfacer = MemorySurfacer(self.mem)  # Phase 6: Predictive surfacing
         
     # ==================== STARTUP ====================
     
@@ -80,8 +93,57 @@ class OpenClawMemory:
         """
         Given current conversation context, surface relevant memories.
         Call this when processing a user message.
+        
+        DEPRECATED: Use surface_with_prediction() instead (Phase 6).
         """
         return self.mem.surface_relevant(context, limit=limit)
+    
+    def surface_with_prediction(self, context: str, limit: int = 5, min_confidence: float = 0.3, verbose: bool = False) -> str:
+        """
+        Phase 6: Context-aware predictive surfacing.
+        
+        Anticipates relevant memories based on:
+        - Entity extraction (people, projects, tasks)
+        - Semantic similarity
+        - Temporal cues
+        - Contradiction detection
+        
+        Args:
+            context: Current conversation/input
+            limit: Max memories to surface
+            min_confidence: Minimum confidence threshold
+            verbose: Include confidence scores and tags in output
+        
+        Returns:
+            Formatted markdown with surfaced memories
+        """
+        surfaced = self.surfacer.surface(context, limit=limit, min_confidence=min_confidence)
+        return self.surfacer.format_surfaced(surfaced, verbose=verbose)
+    
+    def get_predictive_context(self, context: str, limit: int = 5) -> List[SurfacedMemory]:
+        """
+        Get raw surfaced memories for programmatic use.
+        
+        Returns:
+            List of SurfacedMemory objects with confidence scores
+        """
+        return self.surfacer.surface(context, limit=limit, min_confidence=0.0)
+    
+    def surface_for_startup(self) -> str:
+        """
+        Phase 6: Intelligent startup context surfacing.
+        
+        Returns high-priority memories at session initialization:
+        - Active task context
+        - Recent decisions
+        - Identity reminders
+        - Frequently accessed memories
+        
+        Returns:
+            Formatted markdown with startup context
+        """
+        surfaced = self.surfacer.surface_for_startup()
+        return self.surfacer.format_surfaced(surfaced, verbose=False)
     
     def surface_for_message(self, message: str) -> List[Dict]:
         """
