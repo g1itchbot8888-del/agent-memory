@@ -26,6 +26,42 @@ python -m agent_memory.tools.recall "what color is the sky" --db ./test.db
 
 That's it. SQLite + local embeddings. No API keys, no cloud, no dependencies you don't control.
 
+## OpenClaw Hooks
+
+Auto-capture and identity injection for OpenClaw agents:
+
+```bash
+# Install hooks to your OpenClaw
+cp -r hooks/agent-memory-capture ~/.openclaw/hooks/
+cp -r hooks/agent-memory-identity ~/.openclaw/hooks/
+
+# Enable them
+openclaw hooks enable agent-memory-capture
+openclaw hooks enable agent-memory-identity
+```
+
+| Hook | Event | What it does |
+|------|-------|--------------|
+| `agent-memory-capture` | `command:new` | Auto-captures session context before `/new` resets |
+| `agent-memory-identity` | `agent:bootstrap` | Injects identity memories into bootstrap context |
+
+Set your database path:
+
+```json
+{
+  "hooks": {
+    "internal": {
+      "entries": {
+        "agent-memory-capture": {
+          "enabled": true,
+          "env": { "AGENT_MEMORY_DB": "~/clawd/agent_memory.db" }
+        }
+      }
+    }
+  }
+}
+```
+
 ## Architecture
 
 Three layers, loaded strategically to minimize token burn:
