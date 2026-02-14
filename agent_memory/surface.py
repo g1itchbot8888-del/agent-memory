@@ -13,7 +13,7 @@ without explicit search queries.
 
 import re
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Any
 from dataclasses import dataclass
 
 from agent_memory.memory import Memory
@@ -88,12 +88,20 @@ class MemorySurfacer:
                     ))
                     seen_ids.add(r['id'])
         
-        # 2. Check for temporal cues
+        # 2. Check for temporal cues and filter by time
         temporal_delta = self._extract_temporal(context)
         if temporal_delta:
-            # Search for memories from that time period
-            # Note: Would need date-based filtering in production
-            pass
+            temporal_results = self._search_temporal(temporal_delta, context, limit=3)
+            for r in temporal_results:
+                if r['id'] not in seen_ids:
+                    surfaced.append(SurfacedMemory(
+                        id=r['id'],
+                        content=r['content'],
+                        memory_type=r['type'],
+                        relevance=min(0.85, r.get('relevance', 0.5) + 0.2),  # Boost temporal matches
+                        reason=f"from requested time period"
+                    ))
+                    seen_ids.add(r['id'])
         
         # 3. Semantic similarity to overall context
         if len(surfaced) < limit:
@@ -167,6 +175,59 @@ class MemorySurfacer:
                 return delta
         
         return None
+    
+    def _search_temporal(self, delta: timedelta, context: str, limit: int = 3) -> List[Dict]:
+        """
+        Search for memories within a time window.
+        
+        Args:
+            delta: How far back to look
+            context: Context for semantic matching within window
+            limit: Max results
+        
+        Returns:
+            List of matching memories
+        """
+        # Calculate cutoff time
+        now = datetime.now(timezone.utc)
+        if delta.days == 0 and delta.seconds == 0:
+            # "today" means start of today
+            cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            cutoff = now - delta
+        
+        cutoff_str = cutoff.strftime('%Y-%m-%d')
+        
+        # Query memories from that time period
+        cursor = self.mem.conn.execute("""
+            SELECT id, content, layer as type, salience
+            FROM memories
+            WHERE created_at >= ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (cutoff_str, limit * 2))  # Get more, then filter by relevance
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                'id': row[0],
+                'content': row[1],
+                'type': row[2],
+                'relevance': row[3] or 0.5
+            })
+        
+        # If we have context, re-rank by semantic similarity
+        if context and results and hasattr(self.mem, 'search'):
+            # Use existing search to get relevance scores
+            search_results = self.mem.search(context, limit=limit)
+            search_ids = {r['id']: r.get('relevance', 0.5) for r in search_results}
+            
+            # Boost temporal results that also match semantically
+            for r in results:
+                if r['id'] in search_ids:
+                    r['relevance'] = max(r['relevance'], search_ids[r['id']])
+        
+        return results[:limit]
     
     def format_surfaced(self, memories: List[SurfacedMemory]) -> str:
         """Format surfaced memories for injection into context."""
