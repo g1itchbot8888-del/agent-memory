@@ -117,6 +117,9 @@ class MemorySurfacer:
                     ))
                     seen_ids.add(r['id'])
         
+        # 4. Filter out superseded memories (graph-aware contradiction detection)
+        surfaced = self._filter_superseded(surfaced)
+        
         # Sort by relevance
         surfaced.sort(key=lambda x: x.relevance, reverse=True)
         
@@ -228,6 +231,63 @@ class MemorySurfacer:
                     r['relevance'] = max(r['relevance'], search_ids[r['id']])
         
         return results[:limit]
+    
+    def _filter_superseded(self, memories: List[SurfacedMemory]) -> List[SurfacedMemory]:
+        """
+        Filter out memories that have been superseded by newer ones.
+        
+        Uses memory_edges table to detect updated_by relationships.
+        If a memory has been updated, we either skip it or replace it with the newer version.
+        """
+        if not memories:
+            return memories
+        
+        memory_ids = [m.id for m in memories]
+        
+        # Check which memories have been superseded
+        placeholders = ','.join('?' * len(memory_ids))
+        cursor = self.mem.conn.execute(f"""
+            SELECT source_id, target_id 
+            FROM memory_edges 
+            WHERE source_id IN ({placeholders}) 
+            AND relation = 'updated_by'
+        """, memory_ids)
+        
+        superseded = {}  # old_id -> new_id
+        for row in cursor:
+            superseded[row[0]] = row[1]
+        
+        if not superseded:
+            return memories
+        
+        # Filter or replace superseded memories
+        filtered = []
+        seen_replacements: Set[int] = set()
+        
+        for mem in memories:
+            if mem.id in superseded:
+                new_id = superseded[mem.id]
+                if new_id not in seen_replacements:
+                    # Try to get the newer memory
+                    cursor = self.mem.conn.execute(
+                        "SELECT content, layer FROM memories WHERE id = ?", 
+                        (new_id,)
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        filtered.append(SurfacedMemory(
+                            id=new_id,
+                            content=row[0],
+                            memory_type=row[1],
+                            relevance=mem.relevance,
+                            reason=f"{mem.reason} (updated version)"
+                        ))
+                        seen_replacements.add(new_id)
+                # Skip the old memory either way
+            else:
+                filtered.append(mem)
+        
+        return filtered
     
     def format_surfaced(self, memories: List[SurfacedMemory]) -> str:
         """Format surfaced memories for injection into context."""
