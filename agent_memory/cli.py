@@ -67,6 +67,12 @@ def main():
     stats = subparsers.add_parser("stats", help="Show statistics")
     stats.add_argument("--db", default="agent_memory.db", help="Database path")
     
+    # Setup
+    setup = subparsers.add_parser("setup", help="Configure for an agent")
+    setup.add_argument("agent", nargs="?", choices=["openclaw", "claude-code", "opencode", "cursor"],
+                       help="Agent to configure for")
+    setup.add_argument("--db", default="~/agent_memory.db", help="Database path")
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -131,6 +137,93 @@ def main():
         print(f"Embeddings: {'✓' if s['embeddings_available'] else '✗'}")
         print(f"Vector search: {'✓' if s['vector_search_available'] else '✗'}")
         mem.close()
+    
+    elif args.command == "setup":
+        _run_setup(args.agent, args.db)
+
+
+def _run_setup(agent: str | None, db_path: str):
+    """Configure agent-memory for a specific agent."""
+    import json
+    
+    agents = {
+        "openclaw": {
+            "config_path": "~/.openclaw/config.json",
+            "mcp_key": "mcp.servers",
+        },
+        "claude-code": {
+            "config_path": "~/.claude/settings.json",
+            "mcp_key": "mcpServers",
+        },
+        "opencode": {
+            "config_path": "~/.opencode/config.json",
+            "mcp_key": "mcp.servers",
+        },
+        "cursor": {
+            "config_path": "~/.cursor/mcp.json",
+            "mcp_key": "mcpServers",
+        },
+    }
+    
+    if not agent:
+        print("Available agents:")
+        for name in agents:
+            print(f"  agent-memory setup {name}")
+        print("\nOr run interactively:")
+        agent = input("Which agent? [openclaw/claude-code/opencode/cursor]: ").strip().lower()
+        if agent not in agents:
+            print(f"Unknown agent: {agent}")
+            return
+    
+    cfg = agents[agent]
+    config_path = Path(cfg["config_path"]).expanduser()
+    db_expanded = Path(db_path).expanduser()
+    
+    mcp_config = {
+        "agent-memory": {
+            "command": "agent-memory-mcp",
+            "args": ["--db", str(db_expanded)],
+        }
+    }
+    
+    print(f"\n🧠 agent-memory setup for {agent}")
+    print(f"   Database: {db_expanded}")
+    print(f"   Config: {config_path}")
+    print()
+    
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                existing = json.load(f)
+        except:
+            existing = {}
+    else:
+        existing = {}
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Navigate to the mcp servers key
+    keys = cfg["mcp_key"].split(".")
+    target = existing
+    for key in keys[:-1]:
+        if key not in target:
+            target[key] = {}
+        target = target[key]
+    
+    if keys[-1] not in target:
+        target[keys[-1]] = {}
+    target[keys[-1]]["agent-memory"] = mcp_config["agent-memory"]
+    
+    with open(config_path, "w") as f:
+        json.dump(existing, f, indent=2)
+    
+    print("✅ MCP server configured!")
+    print()
+    print("The agent-memory MCP server provides these tools:")
+    print("  - memory_recall: Search memories semantically")
+    print("  - memory_capture: Store new memories")
+    print("  - memory_startup: Get identity + active context")
+    print()
+    print(f"Restart {agent} to activate.")
 
 
 if __name__ == "__main__":
