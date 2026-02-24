@@ -33,6 +33,26 @@ cd agent-memory
 pip install -e ".[all]"
 ```
 
+## Agent Setup
+
+One command to configure for your agent:
+
+```bash
+# OpenClaw
+agent-memory setup openclaw
+
+# Claude Code
+agent-memory setup claude-code
+
+# OpenCode
+agent-memory setup opencode
+
+# Cursor
+agent-memory setup cursor
+```
+
+This auto-configures the MCP server in your agent's config file. Restart the agent to activate.
+
 ## OpenClaw Hooks
 
 Auto-capture and identity injection for OpenClaw agents:
