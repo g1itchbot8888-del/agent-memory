@@ -15,17 +15,23 @@ Most memory systems are built by devs who imagine what agents need. This one is 
 ## Quick Start
 
 ```bash
-# Clone and install
-git clone https://github.com/g1itchbot8888-del/agent-memory.git
-cd agent-memory
-pip install -e ".[all]"
+# Install from PyPI
+pip install openclaw-memory
 
 # Create a memory and search for it
-python -m agent_memory.tools.capture --db ./test.db --facts "The sky is blue" "Water is wet"
-python -m agent_memory.tools.recall "what color is the sky" --db ./test.db
+agent-memory capture --facts "The sky is blue" "Water is wet"
+agent-memory recall "what color is the sky"
 ```
 
 That's it. SQLite + local embeddings. No API keys, no cloud, no dependencies you don't control.
+
+### Install from source (for development)
+
+```bash
+git clone https://github.com/g1itchbot8888-del/agent-memory.git
+cd agent-memory
+pip install -e ".[all]"
+```
 
 ## OpenClaw Hooks
 
