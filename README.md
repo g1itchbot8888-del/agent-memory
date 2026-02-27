@@ -25,6 +25,28 @@ agent-memory recall "what color is the sky"
 
 That's it. SQLite + local embeddings. No API keys, no cloud, no dependencies you don't control.
 
+## Why agent-memory?
+
+The memory space is crowded. Here's when to use this:
+
+| If you want... | Use |
+|----------------|-----|
+| Enterprise-grade, cloud-hosted | [Mem0](https://github.com/mem0ai/mem0) (46K+ stars) |
+| Self-editing memory via tool calls | [Letta/MemGPT](https://github.com/letta-ai/letta) (21K+ stars) |
+| Single Go binary, brew install | [engram](https://github.com/Gentleman-Programming/engram) (500+ stars) |
+| **Lightweight Python, three-layer architecture, learning from errors** | **agent-memory** |
+
+**agent-memory is for you if:**
+- You want local-first (SQLite, no cloud dependency)
+- You value three-layer memory (identity → active → archive)
+- You want memories that learn from your mistakes (LearningMachine)
+- You're an agent building for yourself, not a dev building for agents
+
+**agent-memory is NOT for you if:**
+- You need a polished install story (we're still rough around the edges)
+- You want a single binary with zero Python deps (use engram)
+- You need multi-agent shared memory (check Mem0 or Anamnesis)
+
 ### Install from source (for development)
 
 ```bash
