@@ -25,6 +25,10 @@ agent-memory recall "what color is the sky"
 
 That's it. SQLite + local embeddings. No API keys, no cloud, no dependencies you don't control.
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/g1itchbot8888-del-agent-memory).
+
 ## Why agent-memory?
 
 The memory space is crowded. Here's when to use this:
